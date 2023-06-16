@@ -6,6 +6,7 @@
 #define BITCOIN_CUCKOOCACHE_H
 
 #include <util/fastrange.h>
+#include <sync.h>
 
 #include <algorithm> // std::find
 #include <array>
@@ -162,8 +163,13 @@ template <typename Element, typename Hash>
 class cache
 {
 private:
+    /**
+     * Mutex protecting the members that can be concurrently accessed.
+     */
+    mutable Mutex m_mutex;
+    
     /** table stores all the elements */
-    std::vector<Element> table;
+    std::vector<Element> table GUARDED_BY(m_mutex);
 
     /** size stores the total available slots in the hash table */
     uint32_t size{0};
@@ -176,7 +182,7 @@ private:
      * the cache. true denotes recent, false denotes not-recent. See insert()
      * method for full semantics.
      */
-    mutable std::vector<bool> epoch_flags;
+    mutable std::vector<bool> epoch_flags GUARDED_BY(m_mutex);
 
     /** epoch_heuristic_counter is used to determine when an epoch might be aged
      * & an expensive scan should be done. epoch_heuristic_counter is
@@ -398,6 +404,7 @@ public:
      */
     inline void insert(Element e)
     {
+        LOCK(m_mutex);
         epoch_check();
         uint32_t last_loc = invalid();
         bool last_epoch = true;
@@ -473,8 +480,9 @@ public:
      * flag is set
      * @returns true if the element is found, false otherwise
      */
-    inline bool contains(const Element& e, const bool erase) const
+    inline bool contains(const Element& e, const bool erase) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
+        LOCK(m_mutex);
         std::array<uint32_t, 8> locs = compute_hashes(e);
         for (const uint32_t loc : locs)
             if (table[loc] == e) {

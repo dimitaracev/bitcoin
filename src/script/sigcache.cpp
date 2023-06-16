@@ -33,7 +33,6 @@ private:
     CSHA256 m_salted_hasher_schnorr;
     typedef CuckooCache::cache<uint256, SignatureCacheHasher> map_type;
     map_type setValid;
-    std::shared_mutex cs_sigcache;
 
 public:
     CSignatureCache()
@@ -68,13 +67,11 @@ public:
     bool
     Get(const uint256& entry, const bool erase)
     {
-        std::shared_lock<std::shared_mutex> lock(cs_sigcache);
         return setValid.contains(entry, erase);
     }
 
     void Set(const uint256& entry)
     {
-        std::unique_lock<std::shared_mutex> lock(cs_sigcache);
         setValid.insert(entry);
     }
     std::optional<std::pair<uint32_t, size_t>> setup_bytes(size_t n)
